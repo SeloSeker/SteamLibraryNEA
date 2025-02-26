@@ -1,0 +1,28 @@
+cursor.execute('''CREATE TABLE IF NOT EXISTS user (
+    steam_id TEXT PRIMARY KEY,
+    salt TEXT NOT NULL,
+    hashed_api_key TEXT NOT NULL
+)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS games (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    steam_id TEXT NOT NULL,
+    game_name TEXT NOT NULL,
+    playtime_in_minutes INTEGER DEFAULT 0,
+    last_played INTEGER DEFAULT 0,
+    FOREIGN KEY(steam_id) REFERENCES user(steam_id)
+)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS activities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    steam_id TEXT NOT NULL,
+    activity TEXT NOT NULL,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(steam_id) REFERENCES user(steam_id)
+)''')
+cursor.execute('''CREATE TABLE IF NOT EXISTS achievements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    steam_id TEXT NOT NULL,
+    game_name TEXT NOT NULL,
+    achievement_name TEXT NOT NULL,
+    achievement_description TEXT NOT NULL,
+    FOREIGN KEY(steam_id) REFERENCES user(steam_id)
+)''')
