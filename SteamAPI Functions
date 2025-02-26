@@ -1,0 +1,153 @@
+import requests
+from datetime import datetime
+import sqlite3
+import os
+import hashlib
+
+link = 'http://api.steampowered.com'
+db_file = "steam_login132351.db"
+
+class SteamAPI:
+    def __init__(self, api_key, steam_id=None):
+        self.api_key = api_key
+        self.steam_id = steam_id
+        if steam_id:
+            self.games = self.get_owned_games(steam_id)
+            self.friends = self.get_friends(steam_id)
+            self.friend_ids = [friend['steamid'] for friend in self.friends]
+
+    def add_activity(self, activity):
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO activities (steam_id, activity, timestamp) VALUES (?, ?, ?)",
+                       (self.steam_id, activity, timestamp))
+        cursor.execute("SELECT COUNT(*) FROM activities WHERE steam_id = ?", (self.steam_id,))
+        activity_count = cursor.fetchone()[0]
+        if activity_count > 20:
+            cursor.execute("""
+                DELETE FROM activities
+                WHERE id = (
+                    SELECT id FROM activities
+                    WHERE steam_id = ?
+                    ORDER BY timestamp ASC
+                    LIMIT 1
+                )
+            """, (self.steam_id,))
+        conn.commit()
+        conn.close()
+
+    def get_player_summaries(self, steam_ids):
+        url = f'{link}/ISteamUser/GetPlayerSummaries/v2/?key={self.api_key}&steamids={",".join(steam_ids)}'
+        response = requests.get(url)
+        try:
+            response_data = response.json()
+            return response_data.get('response', {}).get('players', [])
+        except requests.exceptions.JSONDecodeError:
+            return []
+
+    def get_currently_playing_game(self, steam_id):
+        summaries = self.get_player_summaries([steam_id])
+        if summaries:
+            player = summaries[0]
+            if 'gameextrainfo' in player:
+                return player['gameextrainfo']
+        return None
+
+    def get_owned_games(self, steam_id):
+        url = f'{link}/IPlayerService/GetOwnedGames/v1/?key={self.api_key}&steamid={steam_id}&include_appinfo=true&include_played_free_games=true'
+        response = requests.get(url)
+        try:
+            response_data = response.json()
+            return response_data.get('response', {}).get('games', [])
+        except requests.exceptions.JSONDecodeError:
+            return []
+
+    def get_player_achievements(self, steam_id, app_id):
+        url = f'{link}/ISteamUserStats/GetPlayerAchievements/v1/?key={self.api_key}&steamid={steam_id}&appid={app_id}'
+        response = requests.get(url)
+        return response.json().get('playerstats', {}).get('achievements', [])
+
+    def get_game_schema(self, app_id):
+        url = f'{link}/ISteamUserStats/GetSchemaForGame/v2/?key={self.api_key}&appid={app_id}'
+        response = requests.get(url)
+        return response.json().get('game', {}).get('availableGameStats', {}).get('achievements', [])
+
+    def get_friends(self, steam_id):
+        url = f'{link}/ISteamUser/GetFriendList/v1/?key={self.api_key}&steamid={steam_id}&relationship=friend'
+        response = requests.get(url)
+        return response.json().get('friendslist', {}).get('friends', [])
+
+    def get_total_achievements(self):
+        total_achievements = 0
+        for game in self.games:
+            if 'appid' in game:
+                achievements = self.get_player_achievements(self.steam_id, game['appid'])
+                total_achievements += len([ach for ach in achievements if ach.get('achieved', 0) == 1])
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM achievements WHERE steam_id=?", (self.steam_id,))
+        custom_achievements = cursor.fetchone()[0] or 0
+        conn.close()
+        total_achievements += custom_achievements
+        return total_achievements
+
+    def format_last_played(self, unix_timestamp):
+        if unix_timestamp == 0:
+            return "Never Played"
+        if isinstance(unix_timestamp, str):
+            try:
+                unix_timestamp = datetime.strptime(unix_timestamp, "%d/%m/%Y").timestamp()
+            except ValueError:
+                pass
+        return datetime.utcfromtimestamp(int(unix_timestamp)).strftime('%Y/%m/%d')
+
+    def format_playtime(self, minutes):
+        hours = minutes // 60
+        minutes = minutes % 60
+        return f"{hours}h {minutes}m"
+
+    def get_friend_achievements(self, friend_id, app_id):
+        return self.get_player_achievements(friend_id, app_id)
+
+    def get_game_achievements(self, app_id):
+        achievements = self.get_player_achievements(self.steam_id, app_id)
+        achievement_schema = self.get_game_schema(app_id)
+        if isinstance(achievement_schema, list):
+            schema_dict = {ach['name']: ach for ach in achievement_schema}
+        else:
+            schema_dict = {}
+        return achievements, schema_dict
+
+def binary_search(data, search_term, key=lambda x: x):
+    matches = []
+    low = 0
+    high = len(data) - 1
+
+    while low <= high:
+        mid = (low + high) // 2
+        if search_term in key(data[mid]).lower():
+            matches.append(data[mid])
+            left = mid - 1
+            while left >= 0 and search_term in key(data[left]).lower():
+                matches.append(data[left])
+                left -= 1
+            right = mid + 1
+            while right < len(data) and search_term in key(data[right]).lower():
+                matches.append(data[right])
+                right += 1
+            break
+        elif search_term < key(data[mid]).lower():
+            high = mid - 1
+        else:
+            low = mid + 1
+
+    return matches
+
+def hash_api_key(api_key, salt=None):
+    if salt is None:
+        salt = os.urandom(16)
+    else:
+        salt = bytes.fromhex(salt)
+    hashed_key = hashlib.pbkdf2_hmac('sha256', api_key.encode(), salt, 100000)
+    return salt.hex(), hashed_key.hex()
