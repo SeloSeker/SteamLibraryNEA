@@ -160,7 +160,7 @@ class CustomGame:
     def __init__(self, master, steam_user, game_name):
         self.master = master
         self.steam_user = steam_user
-        self.game_name = game_name  # Store game_name as an instance variable
+        self.game_name = game_name
         custom_game_window = tk.Toplevel(self.master)
         custom_game_window.title(f"Custom Game Options - {self.game_name}")
 
@@ -173,6 +173,7 @@ class CustomGame:
         view_achievements_button.pack(pady=10)
         stopwatch_button = tk.Button(custom_game_window, text="Start Stopwatch", command=lambda: self.open_stopwatch(self.game_name))
         stopwatch_button.pack(pady=10)
+
     def open_create_achievement_dialog(self):
         create_achievement_window = tk.Toplevel(self.master)
         create_achievement_window.title("Create Achievement")
@@ -272,6 +273,7 @@ class CustomGame:
 
         back_button = tk.Button(view_achievements_window, text="Back", command=view_achievements_window.destroy)
         back_button.pack(pady=10)
+
     def get_achievements_from_db(self, game_name):
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
@@ -280,6 +282,7 @@ class CustomGame:
         achievements = cursor.fetchall()
         conn.close()
         return achievements
+
     def open_stopwatch(self, game_name):
         stopwatch_window = tk.Toplevel()
         stopwatch_window.title(f"Stopwatch - {game_name}")
@@ -566,7 +569,6 @@ class LibraryFrame(tk.Frame):
         self.current_game = None
         self.sort_buttons_visible = False
 
-        # Initialize custom_game attribute
         self.custom_game = None
 
         self.LibraryTitle = tk.Label(self, font=font.Font(size=30), text="Library")
@@ -586,7 +588,7 @@ class LibraryFrame(tk.Frame):
 
         self.GameListbox = tk.Listbox(self, width=50, height=20)
         self.GameListbox.place(relx=0.5, rely=0.55, anchor='center')
-        self.GameListbox.bind('<<ListboxSelect>>', self.on_select)  # Bind to on_select
+        self.GameListbox.bind('<<ListboxSelect>>', self.on_select)
 
         self.SortButton = tk.Button(self, text="Sort", command=self.toggle_sort_options)
         self.SortButton.place(relx=0.5, rely=0.8, anchor='center')
@@ -724,7 +726,7 @@ class LibraryFrame(tk.Frame):
     def add_game(self):
         game_name = simpledialog.askstring("New Game", "Enter the name of your new game:")
         if game_name:
-            self.custom_game = CustomGame(self, self.steam_user, game_name)  # Pass game_name here
+            self.custom_game = CustomGame(self, self.steam_user, game_name)
             self.custom_game.add_game(game_name)
             self.refresh_library()
 
@@ -796,12 +798,12 @@ class LibraryFrame(tk.Frame):
             playtime_formatted = self.steam_user.format_playtime(game.get('playtime_forever', 0))
             last_played_formatted = self.steam_user.format_last_played(game.get('rtime_last_played', 0))
             self.GameListbox.insert(tk.END, f"{game['name']} - Playtime: {playtime_formatted} - Last Played: {last_played_formatted}")
+
     def on_select(self, event):
         selected_index = self.GameListbox.curselection()
         if selected_index:
             selected_game = self.filtered_games[selected_index[0]]
             if 'appid' not in selected_game:
-                # Directly instantiate CustomGame without calling open_custom_game_options
                 self.custom_game = CustomGame(self, self.steam_user, selected_game['name'])
             else:
                 app_id = selected_game['appid']
@@ -827,7 +829,7 @@ class LibraryFrame(tk.Frame):
         self.achievements_frame.tkraise()
 
     def remove_game(self, game_name, window):
-        self.custom_game = CustomGame(self, self.steam_user, game_name)  # Pass game_name here
+        self.custom_game = CustomGame(self, self.steam_user, game_name)
         self.custom_game.remove_game(game_name)
         self.refresh_library()
         window.destroy()
