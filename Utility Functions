@@ -1,0 +1,32 @@
+def binary_search(data, search_term, key=lambda x: x):
+    matches = []
+    low = 0
+    high = len(data) - 1
+
+    while low <= high:
+        mid = (low + high) // 2
+        if search_term in key(data[mid]).lower():
+            matches.append(data[mid])
+            left = mid - 1
+            while left >= 0 and search_term in key(data[left]).lower():
+                matches.append(data[left])
+                left -= 1
+            right = mid + 1
+            while right < len(data) and search_term in key(data[right]).lower():
+                matches.append(data[right])
+                right += 1
+            break
+        elif search_term < key(data[mid]).lower():
+            high = mid - 1
+        else:
+            low = mid + 1
+
+    return matches
+
+def hash_api_key(api_key, salt=None):
+    if salt is None:
+        salt = os.urandom(16)
+    else:
+        salt = bytes.fromhex(salt)
+    hashed_key = hashlib.pbkdf2_hmac('sha256', api_key.encode(), salt, 100000)
+    return salt.hex(), hashed_key.hex()
