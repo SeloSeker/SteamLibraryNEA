@@ -15,18 +15,18 @@ def binary_search(data, search_term, key=lambda x: x):
 
     while low <= high:
         mid = (low + high) // 2
-        if search_term in key(data[mid]).lower():
+        if search_term.lower() in key(data[mid]).lower():
             matches.append(data[mid])
             left = mid - 1
-            while left >= 0 and search_term in key(data[left]).lower():
+            while left >= 0 and search_term.lower() in key(data[left]).lower():
                 matches.append(data[left])
                 left -= 1
             right = mid + 1
-            while right < len(data) and search_term in key(data[right]).lower():
+            while right < len(data) and search_term.lower() in key(data[right]).lower():
                 matches.append(data[right])
                 right += 1
             break
-        elif search_term < key(data[mid]).lower():
+        elif search_term.lower() < key(data[mid]).lower():
             high = mid - 1
         else:
             low = mid + 1
@@ -42,7 +42,7 @@ def hash_api_key(api_key, salt=None):
     return salt.hex(), hashed_key.hex()
 
 link = 'http://api.steampowered.com'
-db_file = "steam_login132351.db"
+db_file = "steam_login_file.db"
 
 class SteamAPI:
     def __init__(self, api_key, steam_id=None):
@@ -163,17 +163,28 @@ class CustomGame:
         self.game_name = game_name
         custom_game_window = tk.Toplevel(self.master)
         custom_game_window.title(f"Custom Game Options - {self.game_name}")
-
-        remove_game_button = tk.Button(custom_game_window, text="Remove Game", command=lambda: self.remove_game(self.game_name, custom_game_window))
+        remove_game_button = tk.Button(custom_game_window, text="Remove Game", command=lambda: self.remove_game(self.game_name))
         remove_game_button.pack(pady=10)
+
         create_achievements_button = tk.Button(custom_game_window, text="Create Achievements", command=self.open_create_achievement_dialog)
         create_achievements_button.pack(pady=10)
 
         view_achievements_button = tk.Button(custom_game_window, text="View Achievements", command=lambda: self.view_achievements(self.game_name, custom_game_window))
         view_achievements_button.pack(pady=10)
+
         stopwatch_button = tk.Button(custom_game_window, text="Start Stopwatch", command=lambda: self.open_stopwatch(self.game_name))
         stopwatch_button.pack(pady=10)
 
+    def remove_game(self, game_name):
+        conn = sqlite3.connect(db_file)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM games WHERE steam_id = ? AND game_name = ?", (self.steam_user.steam_id, game_name))
+        cursor.execute("DELETE FROM achievements WHERE steam_id = ? AND game_name = ?", (self.steam_user.steam_id, game_name))
+        conn.commit()
+        conn.close()
+        activity = f"Removed game: {game_name}"
+        self.steam_user.add_activity(activity)
+        messagebox.showinfo("Success", f"Game '{game_name}' removed from your library!")
     def open_create_achievement_dialog(self):
         create_achievement_window = tk.Toplevel(self.master)
         create_achievement_window.title("Create Achievement")
@@ -209,18 +220,6 @@ class CustomGame:
         conn.close()
         activity = f"Created game: {game_name}"
         self.steam_user.add_activity(activity)
-        messagebox.showinfo("Success", f"Game '{game_name}' added to your library!")
-
-    def remove_game(self, game_name):
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM games WHERE steam_id = ? AND game_name = ?", (self.steam_user.steam_id, game_name))
-        cursor.execute("DELETE FROM achievements WHERE steam_id = ? AND game_name = ?", (self.steam_user.steam_id, game_name))
-        conn.commit()
-        conn.close()
-        activity = f"Removed game: {game_name}"
-        self.steam_user.add_activity(activity)
-        messagebox.showinfo("Success", f"Game '{game_name}' removed from your library!")
 
     def create_achievement(self, game_name, name, description):
         conn = sqlite3.connect(db_file)
@@ -271,9 +270,6 @@ class CustomGame:
 
         load_achievements()
 
-        back_button = tk.Button(view_achievements_window, text="Back", command=view_achievements_window.destroy)
-        back_button.pack(pady=10)
-
     def get_achievements_from_db(self, game_name):
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
@@ -282,7 +278,6 @@ class CustomGame:
         achievements = cursor.fetchall()
         conn.close()
         return achievements
-
     def open_stopwatch(self, game_name):
         stopwatch_window = tk.Toplevel()
         stopwatch_window.title(f"Stopwatch - {game_name}")
@@ -312,6 +307,7 @@ class CustomGame:
                 self.steam_user.add_activity(activity)
 
         def reset_stopwatch():
+            nonlocal start_time
             elapsed_time_label.config(text="Elapsed time: 0:00")
             if stopwatch_running:
                 start_time = datetime.now()
@@ -401,9 +397,8 @@ class AchievementsFrame(tk.Frame):
     def filter_achievements(self, search_term=""):
         for widget in self.scrollable_frame.winfo_children():
             widget.destroy()
-
         achievements_list = [{'name': name, 'description': data.get('description', 'No description available')}
-                            for name, data in self.schema_dict.items()]
+                            for name, data in self.schema_dict.items() if name in self.user_achievements]
 
         sorted_achievements = sorted(achievements_list, key=lambda x: x['name'].lower())
 
@@ -415,16 +410,13 @@ class AchievementsFrame(tk.Frame):
         for achievement in filtered_achievements:
             achievement_name = achievement['name']
             description = achievement['description']
-            if achievement_name in self.user_achievements:
-                friends_with_this_achievement = self.friends_with_achievement.get(achievement_name, [])
-                if friends_with_this_achievement:
-                    friend_names = [self.friend_usernames.get(friend_id, friend_id) for friend_id in friends_with_this_achievement]
-                    friends_string = ', '.join(friend_names)
-                    achievement_text = f"{achievement_name}: {description}, Friends ({friends_string}) also have this achievement"
-                else:
-                    achievement_text = f"{achievement_name}: {description}"
+            friends_with_this_achievement = self.friends_with_achievement.get(achievement_name, [])
+            if friends_with_this_achievement:
+                friend_names = [self.friend_usernames.get(friend_id, friend_id) for friend_id in friends_with_this_achievement]
+                friends_string = ', '.join(friend_names)
+                achievement_text = f"{achievement_name}: {description}, Friends ({friends_string}) also have this achievement"
             else:
-                achievement_text = f"{achievement_name}: {description} (Locked)"
+                achievement_text = f"{achievement_name}: {description}"
 
             frame_width = self.scrollable_frame.winfo_width()
             label = tk.Label(self.scrollable_frame, text=achievement_text, wraplength=frame_width - 20, justify="left")
@@ -725,10 +717,29 @@ class LibraryFrame(tk.Frame):
 
     def add_game(self):
         game_name = simpledialog.askstring("New Game", "Enter the name of your new game:")
-        if game_name:
-            self.custom_game = CustomGame(self, self.steam_user, game_name)
-            self.custom_game.add_game(game_name)
-            self.refresh_library()
+
+        if game_name is not None:
+            if game_name.strip() == "":
+                messagebox.showerror("Error", "You must provide a name for the custom game!")
+                return
+        
+        else:
+            return
+        
+        self.custom_game = CustomGame(self, self.steam_user, game_name)
+        self.custom_game.add_game(game_name)
+        
+        new_game = {
+            'name': game_name,
+            'playtime_forever': 0,
+            'rtime_last_played': 0
+        }
+        self.original_games.append(new_game)
+        
+        self.sorted_games = sorted(self.original_games, key=lambda x: x['name'].lower())
+        
+        self.filter_games()
+        messagebox.showinfo("Success", f"Game '{game_name}' added to your library!")
 
     def load_library(self, steam_id, api):
         self.steam_user = SteamAPI(api.api_key, steam_id)
@@ -775,8 +786,13 @@ class LibraryFrame(tk.Frame):
             'rtime_last_played': game[2]
         } for game in extra_games]
 
+        self.original_games = self.steam_user.games.copy()
         self.original_games.extend(extra_game_data)
+
+        self.sorted_games = sorted(self.original_games, key=lambda x: x['name'].lower())
+
         self.filter_games()
+
         self.update_total_playtime()
         self.update_total_achievements()
         self.update_friends_list()
@@ -798,7 +814,6 @@ class LibraryFrame(tk.Frame):
             playtime_formatted = self.steam_user.format_playtime(game.get('playtime_forever', 0))
             last_played_formatted = self.steam_user.format_last_played(game.get('rtime_last_played', 0))
             self.GameListbox.insert(tk.END, f"{game['name']} - Playtime: {playtime_formatted} - Last Played: {last_played_formatted}")
-
     def on_select(self, event):
         selected_index = self.GameListbox.curselection()
         if selected_index:
@@ -930,7 +945,7 @@ class LibraryFrame(tk.Frame):
         self.DescButton.place(relx=0.6, rely=0.75, anchor='center')
         self.MostPlayedButton.place(relx=0.4, rely=0.8, anchor='center')
         self.LeastPlayedButton.place(relx=0.6, rely=0.8, anchor='center')
-        self.RecentlyPlayedButton.place(relx=0.5, rely=0.85, anchor='center')
+        self.RecentlyPlayedButton.place(relx=0.5, rely=0.825, anchor='center')
         self.sort_buttons_visible = True
 
     def hide_sort_buttons(self):
@@ -978,7 +993,7 @@ class LibraryFrame(tk.Frame):
 
     def sort_games_by_last_played(self):
         games = self.steam_user.games
-        games.sort(key=lambda x: x.get('rtime_last_played', 0), reverse=True)
+        games.sort(key=lambda x: int(x.get('rtime_last_played', 0)), reverse=True)
         self.display_sorted_games()
 
     def display_sorted_games(self):
