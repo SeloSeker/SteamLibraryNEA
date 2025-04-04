@@ -220,6 +220,7 @@ class CustomGame:
         conn.close()
         activity = f"Created game: {game_name}"
         self.steam_user.add_activity(activity)
+        messagebox.showinfo("Success", f"Game '{game_name}' added to your library!")
 
     def create_achievement(self, game_name, name, description):
         conn = sqlite3.connect(db_file)
