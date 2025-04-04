@@ -4,19 +4,19 @@ def binary_search(data, search_term, key=lambda x: x):
     high = len(data) - 1
 
     while low <= high:
-        mid = (low + high) // 2  # Integer division to find the middle index
-        if search_term in key(data[mid]).lower():
+        mid = (low + high) // 2
+        if search_term.lower() in key(data[mid]).lower():
             matches.append(data[mid])
             left = mid - 1
-            while left >= 0 and search_term in key(data[left]).lower():
+            while left >= 0 and search_term.lower() in key(data[left]).lower():
                 matches.append(data[left])
                 left -= 1
             right = mid + 1
-            while right < len(data) and search_term in key(data[right]).lower():
+            while right < len(data) and search_term.lower() in key(data[right]).lower():
                 matches.append(data[right])
                 right += 1
             break
-        elif search_term < key(data[mid]).lower():
+        elif search_term.lower() < key(data[mid]).lower():
             high = mid - 1
         else:
             low = mid + 1
@@ -24,8 +24,8 @@ def binary_search(data, search_term, key=lambda x: x):
     return matches
 
 def format_playtime(self, minutes):
-    hours = minutes // 60  # Integer division to get hours
-    minutes = minutes % 60  # Modulo operation to get remaining minutes
+    hours = minutes // 60
+    minutes = minutes % 60
     return f"{hours}h {minutes}m"
 
 def update_total_playtime(self):
@@ -34,87 +34,88 @@ def update_total_playtime(self):
     cursor.execute("SELECT SUM(playtime_in_minutes) FROM games WHERE steam_id=?", (self.steam_user.steam_id,))
     custom_playtime = cursor.fetchone()[0] or 0
     steam_playtime = sum(game.get('playtime_forever', 0) for game in self.original_games if 'appid' in game)
-    total_playtime = custom_playtime + steam_playtime  # Summing up playtime
+    total_playtime = custom_playtime + steam_playtime
     conn.close()
-    hours, minutes = divmod(total_playtime, 60)  # Convert total minutes to hours and minutes
+    hours, minutes = divmod(total_playtime, 60)
     self.TotalPlaytimeLabel.config(text=f"Total Playtime: {hours}h {minutes}m")
 
-def update_stopwatch(self):
-    if self.stopwatch_running:
-        elapsed = datetime.now() - self.start_time
-        minutes, seconds = divmod(int(elapsed.total_seconds()), 60)  # Convert seconds to minutes and seconds
-        self.elapsed_time_label.config(text=f"Elapsed time: {minutes:02}:{seconds:02}")
-        self.stopwatch_window.after(1000, self.update_stopwatch)
+def update_stopwatch():
+    if stopwatch_running:
+        elapsed = datetime.now() - start_time
+        minutes, seconds = divmod(int(elapsed.total_seconds()), 60)
+        elapsed_time_label.config(text=f"Elapsed time: {minutes:02}:{seconds:02}")
+        stopwatch_window.after(1000, update_stopwatch)
 
-def merge_sort(self, arr, key, ascending=True):
-    if len(arr) > 1:
-        mid = len(arr) // 2  # Integer division to find the middle index
-        left = arr[:mid]
-        right = arr[mid:]
-        self.merge_sort(left, key, ascending)
-        self.merge_sort(right, key, ascending)
-        i = j = k = 0
-        while i < len(left) and j < len(right):
-            if (left[i][key] < right[j][key] and ascending) or (left[i][key] > right[j][key] and not ascending):
+    def merge_sort(self, arr, key, ascending=True):
+        if len(arr) > 1:
+            mid = len(arr) // 2
+            left = arr[:mid]
+            right = arr[mid:]
+            self.merge_sort(left, key, ascending)
+            self.merge_sort(right, key, ascending)
+            i = j = k = 0
+            while i < len(left) and j < len(right):
+                if (left[i][key] < right[j][key] and ascending) or (left[i][key] > right[j][key] and not ascending):
+                    arr[k] = left[i]
+                    i += 1
+                else:
+                    arr[k] = right[j]
+                    j += 1
+                k += 1
+            while i < len(left):
                 arr[k] = left[i]
                 i += 1
-            else:
+                k += 1
+            while j < len(right):
                 arr[k] = right[j]
                 j += 1
-            k += 1
-        while i < len(left):
-            arr[k] = left[i]
-            i += 1
-            k += 1
-        while j < len(right):
-            arr[k] = right[j]
-            j += 1
-            k += 1
+                k += 1
 
 def get_total_achievements(self):
     total_achievements = 0
     for game in self.games:
         if 'appid' in game:
             achievements = self.get_player_achievements(self.steam_id, game['appid'])
-            total_achievements += len([ach for ach in achievements if ach.get('achieved', 0) == 1])  # Count unlocked achievements
+            total_achievements += len([ach for ach in achievements if ach.get('achieved', 0) == 1])
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM achievements WHERE steam_id=?", (self.steam_id,))
     custom_achievements = cursor.fetchone()[0] or 0
     conn.close()
-    total_achievements += custom_achievements  # Add custom achievements
+    total_achievements += custom_achievements
     return total_achievements
 
-def stop_stopwatch(self):
-    if self.stopwatch_running:
-        self.stopwatch_running = False
+def stop_stopwatch():
+    nonlocal stopwatch_running
+    if stopwatch_running:
+        stopwatch_running = False
         end_time = datetime.now()
-        elapsed_seconds = int((end_time - self.start_time).total_seconds())  # Calculate elapsed time in seconds
-        self.update_custom_game_stats(self.game_name, elapsed_seconds, end_time)
-        self.stopwatch_window.destroy()
-        activity = f"Stopped playing: {self.game_name}"
+        elapsed_seconds = int((end_time - start_time).total_seconds())
+        self.update_custom_game_stats(game_name, elapsed_seconds, end_time)
+        stopwatch_window.destroy()
+        activity = f"Stopped playing: {game_name}"
         self.steam_user.add_activity(activity)
 
 def update_custom_game_stats(self, game_name, elapsed_seconds, last_played_time):
     formatted_last_played = last_played_time.strftime("%d/%m/%Y")
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
-    elapsed_minutes = elapsed_seconds // 60  # Convert seconds to minutes
+    elapsed_minutes = elapsed_seconds // 60
     cursor.execute('''UPDATE games
                     SET playtime_in_minutes = playtime_in_minutes + ?, last_played = ?
                     WHERE steam_id = ? AND game_name = ?''',
-                 (elapsed_minutes, formatted_last_played, self.steam_user.steam_id, game_name))
+                (elapsed_minutes, formatted_last_played, self.steam_user.steam_id, game_name))
     conn.commit()
     conn.close()
 
 def sort_games_by_playtime(self, ascending=True):
     games = self.steam_user.games
-    games.sort(key=lambda x: x.get('playtime_forever', 0), reverse=not ascending)  # Sort by playtime
+    games.sort(key=lambda x: x.get('playtime_forever', 0), reverse=not ascending)
     self.display_sorted_games()
 
 def sort_games_by_last_played(self):
     games = self.steam_user.games
-    games.sort(key=lambda x: x.get('rtime_last_played', 0), reverse=True)  # Sort by last played time
+    games.sort(key=lambda x: int(x.get('rtime_last_played', 0)), reverse=True)
     self.display_sorted_games()
 
 def format_last_played(self, unix_timestamp):
@@ -125,4 +126,5 @@ def format_last_played(self, unix_timestamp):
             unix_timestamp = datetime.strptime(unix_timestamp, "%d/%m/%Y").timestamp()
         except ValueError:
             pass
-    return datetime.utcfromtimestamp(int(unix_timestamp)).strftime('%Y/%m/%d')  # Convert Unix timestamp to date
+    return datetime.utcfromtimestamp(int(unix_timestamp)).strftime('%Y/%m/%d')
+
