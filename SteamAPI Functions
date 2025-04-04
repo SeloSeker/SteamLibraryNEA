@@ -5,7 +5,7 @@ import os
 import hashlib
 
 link = 'http://api.steampowered.com'
-db_file = "steam_login132351.db"
+db_file = "steam_login_file.db"
 
 class SteamAPI:
     def __init__(self, api_key, steam_id=None):
@@ -21,7 +21,7 @@ class SteamAPI:
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute("INSERT INTO activities (steam_id, activity, timestamp) VALUES (?, ?, ?)",
-                       (self.steam_id, activity, timestamp))
+                    (self.steam_id, activity, timestamp))
         cursor.execute("SELECT COUNT(*) FROM activities WHERE steam_id = ?", (self.steam_id,))
         activity_count = cursor.fetchone()[0]
         if activity_count > 20:
