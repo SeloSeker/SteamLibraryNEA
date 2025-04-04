@@ -58,7 +58,7 @@ class SteamAPI:
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
         cursor.execute("INSERT INTO activities (steam_id, activity, timestamp) VALUES (?, ?, ?)",
-                        (self.steam_id, activity, timestamp))
+                    (self.steam_id, activity, timestamp))
         cursor.execute("SELECT COUNT(*) FROM activities WHERE steam_id = ?", (self.steam_id,))
         activity_count = cursor.fetchone()[0]
         if activity_count > 20:
@@ -796,6 +796,7 @@ class LibraryFrame(tk.Frame):
         self.update_total_playtime()
         self.update_total_achievements()
         self.update_friends_list()
+        self.update_activities()
 
     def filter_games(self, event=None):
         search_term = self.SearchInput.get().lower()
@@ -925,14 +926,29 @@ class LibraryFrame(tk.Frame):
         back_button.pack(pady=10)
 
     def check_friend_activities(self):
+        if not hasattr(self, 'friend_previous_games'):
+            self.friend_previous_games = {}
+
         friend_ids = [friend['steamid'] for friend in self.steam_user.friends]
         friend_summaries = self.steam_user.get_player_summaries(friend_ids)
-        
+
         for friend in friend_summaries:
-            if friend.get('gameextrainfo'):
-                activity = f"Friend {friend['personaname']} started playing {friend['gameextrainfo']}"
-                self.add_activity(activity)
-        self.after(300000, self.check_friend_activities)
+            friend_id = friend['steamid']
+            friend_name = friend.get('personaname', 'Unknown')
+            current_game = friend.get('gameextrainfo', None)
+
+            previous_game = self.friend_previous_games.get(friend_id, None)
+
+            if current_game != previous_game:
+                if current_game:
+                    activity = f"Friend {friend_name} started playing {current_game}"
+                    self.add_activity(activity)
+                elif previous_game:
+                    activity = f"Friend {friend_name} stopped playing {previous_game}"
+                    self.add_activity(activity)
+                self.friend_previous_games[friend_id] = current_game
+
+        self.after(30000, self.check_friend_activities)
 
     def toggle_sort_options(self):
         if self.sort_buttons_visible:
