@@ -3,7 +3,7 @@ def add_activity(self, activity):
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
     cursor.execute("INSERT INTO activities (steam_id, activity, timestamp) VALUES (?, ?, ?)",
-                  (self.steam_id, activity, timestamp))
+                (self.steam_id, activity, timestamp))
     cursor.execute("SELECT COUNT(*) FROM activities WHERE steam_id = ?", (self.steam_id,))
     activity_count = cursor.fetchone()[0]
     if activity_count > 20:
@@ -147,8 +147,14 @@ def refresh_library(self):
         'rtime_last_played': game[2]
     } for game in extra_games]
 
+    self.original_games = self.steam_user.games.copy()
     self.original_games.extend(extra_game_data)
+
+    self.sorted_games = sorted(self.original_games, key=lambda x: x['name'].lower())
+
     self.filter_games()
+
     self.update_total_playtime()
     self.update_total_achievements()
     self.update_friends_list()
+    self.update_activities()
