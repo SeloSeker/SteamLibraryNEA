@@ -696,10 +696,28 @@ class LibraryFrame(tk.Frame):
     def get_activities(self, steam_id):
         conn = sqlite3.connect(db_file)
         cursor = conn.cursor()
-        cursor.execute("SELECT activity, timestamp FROM activities WHERE steam_id = ? ORDER BY timestamp DESC LIMIT 20", (steam_id,))
+        cursor.execute("""
+            SELECT u.steam_id, a.activity, a.timestamp 
+            FROM activities a
+            INNER JOIN user u ON a.steam_id = u.steam_id
+            WHERE a.steam_id = ? 
+            ORDER BY a.timestamp DESC 
+            LIMIT 20
+        """, (steam_id,))
         activities = cursor.fetchall()
         conn.close()
-        return activities
+        
+        steam_ids = list(set(activity[0] for activity in activities))
+        summaries = self.steam_user.get_player_summaries(steam_ids)
+        username_map = {player['steamid']: player['personaname'] for player in summaries}
+        
+        formatted_activities = []
+        for activity in activities:
+            steam_id, act, timestamp = activity
+            username = username_map.get(steam_id, "Unknown User")
+            formatted_activities.append((f"{username}: {act}", timestamp))
+        
+        return formatted_activities
 
     def add_activity(self, activity):
         self.steam_user.add_activity(activity)
