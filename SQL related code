@@ -1,3 +1,42 @@
+def Login(self):
+    api_key = self.ApiInput.get().strip()
+    steam_id = self.SteamIDInput.get().strip()
+    if not api_key or not steam_id:
+        messagebox.showerror("Error", "Please enter both Steam API Key and SteamID")
+        return
+
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    cursor.execute("SELECT hashed_api_key, salt FROM user WHERE steam_id=?", (steam_id,))
+    result = cursor.fetchone()
+
+    if result:
+        stored_hashed_key, salt = result
+        _, hashed_api_key = hash_api_key(api_key, salt)
+        if stored_hashed_key == hashed_api_key:
+            self.load_user(steam_id, api_key)
+        else:
+            try:
+                steam = SteamAPI(api_key)
+                steam.get_owned_games(steam_id)
+                salt, hashed_api_key = hash_api_key(api_key)
+                cursor.execute("UPDATE user SET hashed_api_key=?, salt=? WHERE steam_id=?", (hashed_api_key, salt, steam_id))
+                conn.commit()
+                self.load_user(steam_id, api_key)
+            except Exception as e:
+                messagebox.showerror("Error", f"Invalid API key. {e}")
+    else:
+        try:
+            steam = SteamAPI(api_key)
+            steam.get_owned_games(steam_id)
+            salt, hashed_api_key = hash_api_key(api_key)
+            cursor.execute("INSERT INTO user (steam_id, hashed_api_key, salt) VALUES (?, ?, ?)", (steam_id, hashed_api_key, salt))
+            conn.commit()
+            self.load_user(steam_id, api_key)
+        except Exception as e:
+            messagebox.showerror("Error", f"Invalid API key. {e}")
+    conn.close()
+
 def add_activity(self, activity):
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn = sqlite3.connect(db_file)
@@ -19,19 +58,31 @@ def add_activity(self, activity):
     conn.commit()
     conn.close()
 
-def get_total_achievements(self):
-    total_achievements = 0
-    for game in self.games:
-        if 'appid' in game:
-            achievements = self.get_player_achievements(self.steam_id, game['appid'])
-            total_achievements += len([ach for ach in achievements if ach.get('achieved', 0) == 1])
+def get_activities(self, steam_id):
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM achievements WHERE steam_id=?", (self.steam_id,))
-    custom_achievements = cursor.fetchone()[0] or 0
+    cursor.execute("""
+        SELECT u.steam_id, a.activity, a.timestamp 
+        FROM activities a
+        INNER JOIN user u ON a.steam_id = u.steam_id
+        WHERE a.steam_id = ? 
+        ORDER BY a.timestamp DESC 
+        LIMIT 20
+    """, (steam_id,))
+    activities = cursor.fetchall()
     conn.close()
-    total_achievements += custom_achievements
-    return total_achievements
+    
+    steam_ids = list(set(activity[0] for activity in activities))
+    summaries = self.steam_user.get_player_summaries(steam_ids)
+    username_map = {player['steamid']: player['personaname'] for player in summaries}
+    
+    formatted_activities = []
+    for activity in activities:
+        steam_id, act, timestamp = activity
+        username = username_map.get(steam_id, "Unknown User")
+        formatted_activities.append((f"{username}: {act}", timestamp))
+    
+    return formatted_activities
 
 def add_game(self, game_name):
     conn = sqlite3.connect(db_file)
@@ -55,6 +106,18 @@ def remove_game(self, game_name):
     self.steam_user.add_activity(activity)
     messagebox.showinfo("Success", f"Game '{game_name}' removed from your library!")
 
+def update_custom_game_stats(self, game_name, elapsed_seconds, last_played_time):
+    formatted_last_played = last_played_time.strftime("%d/%m/%Y")
+    conn = sqlite3.connect(db_file)
+    cursor = conn.cursor()
+    elapsed_minutes = elapsed_seconds // 60
+    cursor.execute('''UPDATE games
+                    SET playtime_in_minutes = playtime_in_minutes + ?, last_played = ?
+                    WHERE steam_id = ? AND game_name = ?''',
+                (elapsed_minutes, formatted_last_played, self.steam_user.steam_id, game_name))
+    conn.commit()
+    conn.close()
+
 def create_achievement(self, game_name, name, description):
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
@@ -75,25 +138,19 @@ def get_achievements_from_db(self, game_name):
     conn.close()
     return achievements
 
-def update_custom_game_stats(self, game_name, elapsed_seconds, last_played_time):
-    formatted_last_played = last_played_time.strftime("%d/%m/%Y")
+def get_total_achievements(self):
+    total_achievements = 0
+    for game in self.games:
+        if 'appid' in game:
+            achievements = self.get_player_achievements(self.steam_id, game['appid'])
+            total_achievements += len([ach for ach in achievements if ach.get('achieved', 0) == 1])
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
-    elapsed_minutes = elapsed_seconds // 60
-    cursor.execute('''UPDATE games
-                    SET playtime_in_minutes = playtime_in_minutes + ?, last_played = ?
-                    WHERE steam_id = ? AND game_name = ?''',
-                (elapsed_minutes, formatted_last_played, self.steam_user.steam_id, game_name))
-    conn.commit()
+    cursor.execute("SELECT COUNT(*) FROM achievements WHERE steam_id=?", (self.steam_id,))
+    custom_achievements = cursor.fetchone()[0] or 0
     conn.close()
-
-def get_activities(self, steam_id):
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-    cursor.execute("SELECT activity, timestamp FROM activities WHERE steam_id = ? ORDER BY timestamp DESC LIMIT 20", (steam_id,))
-    activities = cursor.fetchall()
-    conn.close()
-    return activities
+    total_achievements += custom_achievements
+    return total_achievements
 
 def update_total_playtime(self):
     conn = sqlite3.connect(db_file)
@@ -105,31 +162,6 @@ def update_total_playtime(self):
     conn.close()
     hours, minutes = divmod(total_playtime, 60)
     self.TotalPlaytimeLabel.config(text=f"Total Playtime: {hours}h {minutes}m")
-
-def load_library(self, steam_id, api):
-    self.steam_user = SteamAPI(api.api_key, steam_id)
-    self.original_games = self.steam_user.games
-    for game in self.original_games:
-        game['playtime_forever'] = game.get('playtime_forever', 0)
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-    cursor.execute("SELECT game_name, playtime_in_minutes, last_played FROM games WHERE steam_id=?", (self.steam_user.steam_id,))
-    extra_games = cursor.fetchall()
-    conn.close()
-    extra_game_data = [{
-        'name': game[0],
-        'playtime_forever': game[1],
-        'rtime_last_played': game[2]
-    } for game in extra_games]
-    self.original_games.extend(extra_game_data)
-    self.sorted_games = sorted(self.original_games, key=lambda x: x['name'].lower())
-    self.update_game_list(self.sorted_games)
-    self.update_total_playtime()
-    self.update_total_achievements()
-    self.update_activities()
-    self.check_current_game()
-    self.check_friend_activities()
-    self.update_friends_list()
 
 def refresh_library(self):
     self.steam_user.games = self.steam_user.get_owned_games(self.steam_user.steam_id)
